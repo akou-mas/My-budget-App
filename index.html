@@ -135,7 +135,14 @@
 
 <script>
   const LIFF_ID = "2009934453-HZJn2MuR";
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwsEXC_riVRpdpqn7Q8Q4nrm23Gko3Eru7u789lTdkRZN-zXQNv9KbIv_uwBmpyGFBSiQ/exec";
+  /** 直接叩く用（file:// など）。通常は Vercel 上では /api/gas 経由 */
+  const GAS_DIRECT =
+    "https://script.google.com/macros/s/AKfycbwsEXC_riVRpdpqn7Q8Q4nrm23Gko3Eru7u789lTdkRZN-zXQNv9KbIv_uwBmpyGFBSiQ/exec";
+
+  function gasFetchUrl() {
+    if (location.protocol === "file:") return GAS_DIRECT;
+    return location.origin + "/api/gas";
+  }
   
   let currentType = "出金";
   let imageBlobs = [];
@@ -171,8 +178,9 @@
           "バックエンド（GAS）との通信に失敗しました。\n" +
           "・GASを「ウェブアプリ」として再デプロイしたか\n" +
           "・アクセス権が「全員」になっているか\n" +
-          "・index.html の GAS_URL が新しい /exec URL か\n" +
-          "ブラウザの開発者ツール（Network）で script.google.com へのPOSTを確認してください。\n\n" +
+          "・index.html の GAS_DIRECT が新しい /exec URL か（Vercel は /api/gas がプロキシ）\n" +
+          "・Vercel の Environment Variables に GAS_URL を設定している場合は正しいか\n" +
+          "開発者ツール（Network）で /api/gas または script.google.com を確認してください。\n\n" +
           (gasErr && gasErr.message ? gasErr.message : "")
         );
         return;
@@ -199,13 +207,21 @@
    * 2. GAS通信関数
    */
   async function callGas(action, data) {
-    const res = await fetch(GAS_URL, {
+    const url = gasFetchUrl();
+    const payload = JSON.stringify({ action, data });
+    const viaProxy = url.indexOf("/api/gas") !== -1;
+    const res = await fetch(url, {
       method: "POST",
       redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, data })
+      headers: viaProxy
+        ? { "Content-Type": "application/json;charset=utf-8" }
+        : { "Content-Type": "text/plain;charset=utf-8" },
+      body: payload
     });
     const text = await res.text();
+    if (!res.ok) {
+      throw new Error("HTTP " + res.status + ": " + text.slice(0, 200));
+    }
     let json;
     try {
       json = JSON.parse(text);
