@@ -152,22 +152,45 @@
    * 1. 起動時処理
    */
   window.onload = function() {
-    liff.init({ liffId: LIFF_ID }).then(() => {
-      if (!liff.isLoggedIn()) { liff.login(); return; }
+    // Endpoint URL（Vercelの本番URLなど）と一致させるため、ログイン後の戻り先を明示する
+    const redirectUri = window.location.href.split("#")[0];
+    liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true }).then(() => {
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: redirectUri });
+        return;
+      }
       return liff.getProfile();
     }).then(async (p) => {
       if (!p) return;
-      
-      // 自動ユーザー登録を実行
-      await callGas("register", { userId: p.userId, displayName: p.displayName });
-      
+
+      try {
+        await callGas("register", { userId: p.userId, displayName: p.displayName });
+      } catch (gasErr) {
+        console.error("GAS register エラー:", gasErr);
+        alert(
+          "バックエンド（GAS）との通信に失敗しました。\n" +
+          "・GASを「ウェブアプリ」として再デプロイしたか\n" +
+          "・アクセス権が「全員」になっているか\n" +
+          "・index.html の GAS_URL が新しい /exec URL か\n" +
+          "ブラウザの開発者ツール（Network）で script.google.com へのPOSTを確認してください。\n\n" +
+          (gasErr && gasErr.message ? gasErr.message : "")
+        );
+        return;
+      }
+
       document.getElementById('submitBtn').disabled = false;
       document.getElementById('submitBtn').innerText = "登録する";
-      
+
       updateCategoryOptions();
-      initFilters();
+      await initFilters();
     }).catch(err => {
       console.error("LIFF初期化エラー:", err);
+      alert(
+        "LINE（LIFF）の初期化に失敗しました。\n" +
+        "・LINE Developers の LIFF の Endpoint URL を、今開いているURL（例: Vercelのhttps://〜）と完全一致させてください\n" +
+        "・リッチメニューは LIFF URL（https://liff.line.me/...）から開いてください\n\n" +
+        (err && err.message ? err.message : String(err))
+      );
     });
     document.getElementById('date').value = new Date().toISOString().split('T')[0];
   };
@@ -176,8 +199,20 @@
    * 2. GAS通信関数
    */
   async function callGas(action, data) {
-    const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action, data }) });
-    return await res.json();
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, data })
+    });
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (_) {
+      throw new Error("GASの応答がJSONではありません（デプロイURL・doPost・権限を確認）。先頭: " + text.slice(0, 120));
+    }
+    return json;
   }
 
   /**
