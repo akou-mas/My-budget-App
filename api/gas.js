@@ -3,7 +3,7 @@
  * デプロイ後の GAS URL は Vercel の Environment Variables で GAS_URL を上書き可能
  */
 const DEFAULT_GAS_URL =
-  "https://script.google.com/macros/s/AKfycbwsEXC_riVRpdpqn7Q8Q4nrm23Gko3Eru7u789lTdkRZN-zXQNv9KbIv_uwBmpyGFBSiQ/exec";
+  "https://script.google.com/macros/s/AKfycbx0R96pywdR_FgVh79D4VS4K8XbGdYng1PQYoB4zm2va6GPElz39q95jHn3a840eDqX7g/exec";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
